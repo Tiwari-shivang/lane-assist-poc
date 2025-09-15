@@ -1,0 +1,487 @@
+# EU Road Markings Evaluation Tests
+# Based on UNECE Vienna Convention & CEN EN Standards
+# Generated from eu_road_markings_cheatsheet.md
+
+test_suite:
+  name: "EU Road Markings Validation"
+  version: "1.0"
+  description: "Comprehensive evaluation tests for European road marking detection and validation"
+
+# 1. LONGITUDINAL MARKINGS TESTS
+longitudinal_markings:
+  
+  normal_broken_line:
+    test_id: "LM_001"
+    description: "Normal broken guidance line validation"
+    geometry_tests:
+      - name: "minimum_width"
+        rule: "width_m >= 0.10"
+        test_cases:
+          - input: {width_m: 0.09}
+            expected: false
+            reason: "Below minimum width"
+          - input: {width_m: 0.10}
+            expected: true
+          - input: {width_m: 0.12}
+            expected: true
+            
+      - name: "minimum_stroke_length"
+        rule: "stroke_length_m >= 1.0"
+        test_cases:
+          - input: {stroke_length_m: 0.8}
+            expected: false
+          - input: {stroke_length_m: 1.0}
+            expected: true
+          - input: {stroke_length_m: 2.5}
+            expected: true
+            
+      - name: "gap_to_stroke_ratio"
+        rule: "gap_m >= 2.0 * stroke_length_m AND gap_m <= 4.0 * stroke_length_m AND gap_m <= 12.0"
+        test_cases:
+          - input: {stroke_length_m: 1.0, gap_m: 1.5}
+            expected: false
+            reason: "Gap too small relative to stroke"
+          - input: {stroke_length_m: 1.0, gap_m: 2.0}
+            expected: true
+          - input: {stroke_length_m: 1.0, gap_m: 4.0}
+            expected: true
+          - input: {stroke_length_m: 1.0, gap_m: 5.0}
+            expected: false
+            reason: "Gap too large relative to stroke"
+          - input: {stroke_length_m: 4.0, gap_m: 15.0}
+            expected: false
+            reason: "Gap exceeds 12m maximum"
+
+  broken_warning_line:
+    test_id: "LM_002"
+    description: "Broken warning line validation"
+    geometry_tests:
+      - name: "stroke_longer_than_gap"
+        rule: "stroke_length_m >= 2.0 * gap_m AND stroke_length_m <= 4.0 * gap_m"
+        test_cases:
+          - input: {stroke_length_m: 3.0, gap_m: 2.0}
+            expected: false
+            reason: "Stroke not sufficiently longer than gap"
+          - input: {stroke_length_m: 4.0, gap_m: 1.5}
+            expected: true
+          - input: {stroke_length_m: 8.0, gap_m: 2.5}
+            expected: false
+            reason: "Stroke too long relative to gap"
+
+  solid_line:
+    test_id: "LM_003"
+    description: "Solid line validation"
+    geometry_tests:
+      - name: "minimum_width"
+        rule: "width_m >= 0.10"
+        test_cases:
+          - input: {width_m: 0.08}
+            expected: false
+          - input: {width_m: 0.10}
+            expected: true
+            
+      - name: "minimum_continuous_length"
+        rule: "continuous_length_m >= 20.0"
+        test_cases:
+          - input: {continuous_length_m: 15.0}
+            expected: false
+          - input: {continuous_length_m: 20.0}
+            expected: true
+          - input: {continuous_length_m: 50.0}
+            expected: true
+
+  edge_line_motorway:
+    test_id: "LM_004"
+    description: "Motorway edge line validation"
+    geometry_tests:
+      - name: "motorway_minimum_width"
+        rule: "width_m >= 0.15"
+        test_cases:
+          - input: {width_m: 0.12}
+            expected: false
+          - input: {width_m: 0.15}
+            expected: true
+          - input: {width_m: 0.20}
+            expected: true
+
+# 2. TRANSVERSE MARKINGS TESTS
+transverse_markings:
+
+  stop_line:
+    test_id: "TM_001"
+    description: "Stop line validation"
+    geometry_tests:
+      - name: "bar_width_range"
+        rule: "bar_width_m >= 0.25 AND bar_width_m <= 0.40"
+        test_cases:
+          - input: {bar_width_m: 0.20}
+            expected: false
+          - input: {bar_width_m: 0.25}
+            expected: true
+          - input: {bar_width_m: 0.32}
+            expected: true
+          - input: {bar_width_m: 0.40}
+            expected: true
+          - input: {bar_width_m: 0.45}
+            expected: false
+
+  give_way_bars:
+    test_id: "TM_002"
+    description: "Give way bar markings validation"
+    geometry_tests:
+      - name: "bar_dimensions"
+        rule: "bar_width_m >= 0.20 AND bar_width_m <= 0.60 AND bar_length_m >= 2.0 * bar_width_m"
+        test_cases:
+          - input: {bar_width_m: 0.15, bar_length_m: 0.40}
+            expected: false
+            reason: "Width below minimum"
+          - input: {bar_width_m: 0.30, bar_length_m: 0.50}
+            expected: false
+            reason: "Length not 2x width"
+          - input: {bar_width_m: 0.30, bar_length_m: 0.60}
+            expected: true
+
+  give_way_triangles:
+    test_id: "TM_003"
+    description: "Give way triangle markings validation"
+    geometry_tests:
+      - name: "triangle_dimensions"
+        rule: "base_m >= 0.40 AND base_m <= 0.60 AND height_m >= 0.60 AND height_m <= 0.70"
+        test_cases:
+          - input: {base_m: 0.35, height_m: 0.65}
+            expected: false
+          - input: {base_m: 0.50, height_m: 0.55}
+            expected: false
+          - input: {base_m: 0.45, height_m: 0.65}
+            expected: true
+          - input: {base_m: 0.60, height_m: 0.70}
+            expected: true
+
+  zebra_crossing:
+    test_id: "TM_004"
+    description: "Pedestrian zebra crossing validation"
+    geometry_tests:
+      - name: "stripe_gap_pattern"
+        rule: "(stripe_width_m + gap_width_m) >= 0.80 AND (stripe_width_m + gap_width_m) <= 1.40"
+        test_cases:
+          - input: {stripe_width_m: 0.30, gap_width_m: 0.40}
+            expected: false
+            reason: "Combined width too small"
+          - input: {stripe_width_m: 0.40, gap_width_m: 0.40}
+            expected: true
+          - input: {stripe_width_m: 0.60, gap_width_m: 0.60}
+            expected: true
+          - input: {stripe_width_m: 0.80, gap_width_m: 0.80}
+            expected: false
+            reason: "Combined width too large"
+            
+      - name: "minimum_crossing_width_low_speed"
+        rule: "crossing_width_m >= 2.5 WHERE v85_kph <= 60"
+        test_cases:
+          - input: {crossing_width_m: 2.0, v85_kph: 50}
+            expected: false
+          - input: {crossing_width_m: 2.5, v85_kph: 60}
+            expected: true
+          - input: {crossing_width_m: 3.0, v85_kph: 45}
+            expected: true
+            
+      - name: "minimum_crossing_width_high_speed"
+        rule: "crossing_width_m >= 4.0 WHERE v85_kph > 60"
+        test_cases:
+          - input: {crossing_width_m: 3.5, v85_kph: 70}
+            expected: false
+          - input: {crossing_width_m: 4.0, v85_kph: 65}
+            expected: true
+          - input: {crossing_width_m: 5.0, v85_kph: 80}
+            expected: true
+
+  cycle_crossing:
+    test_id: "TM_005"
+    description: "Cycle crossing validation"
+    geometry_tests:
+      - name: "element_dimensions"
+        rule: "element_size_m >= 0.40 AND element_size_m <= 0.60 AND gap_m == element_size_m"
+        test_cases:
+          - input: {element_size_m: 0.35, gap_m: 0.35}
+            expected: false
+          - input: {element_size_m: 0.45, gap_m: 0.40}
+            expected: false
+            reason: "Gap must equal element size"
+          - input: {element_size_m: 0.50, gap_m: 0.50}
+            expected: true
+            
+      - name: "crossing_width"
+        rule: "width_m >= 1.8 (one_way) OR width_m >= 3.0 (two_way)"
+        test_cases:
+          - input: {width_m: 1.5, direction: "one_way"}
+            expected: false
+          - input: {width_m: 1.8, direction: "one_way"}
+            expected: true
+          - input: {width_m: 2.5, direction: "two_way"}
+            expected: false
+          - input: {width_m: 3.0, direction: "two_way"}
+            expected: true
+
+# 3. OTHER MARKINGS TESTS
+other_markings:
+
+  lane_arrows:
+    test_id: "OM_001"
+    description: "Lane selection arrow validation"
+    geometry_tests:
+      - name: "minimum_arrow_length"
+        rule: "arrow_length_m >= 2.0"
+        test_cases:
+          - input: {arrow_length_m: 1.8}
+            expected: false
+          - input: {arrow_length_m: 2.0}
+            expected: true
+          - input: {arrow_length_m: 3.5}
+            expected: true
+
+  word_markings:
+    test_id: "OM_002"
+    description: "Word and numeral marking validation"
+    geometry_tests:
+      - name: "character_height_low_speed"
+        rule: "char_height_m >= 1.6 WHERE approach_speed_kph <= 60"
+        test_cases:
+          - input: {char_height_m: 1.4, approach_speed_kph: 50}
+            expected: false
+          - input: {char_height_m: 1.6, approach_speed_kph: 60}
+            expected: true
+          - input: {char_height_m: 2.0, approach_speed_kph: 40}
+            expected: true
+            
+      - name: "character_height_high_speed"
+        rule: "char_height_m >= 2.5 WHERE approach_speed_kph > 60"
+        test_cases:
+          - input: {char_height_m: 2.0, approach_speed_kph: 80}
+            expected: false
+          - input: {char_height_m: 2.5, approach_speed_kph: 70}
+            expected: true
+          - input: {char_height_m: 4.0, approach_speed_kph: 100}
+            expected: true
+
+# 4. COLOR VALIDATION TESTS
+color_validation:
+  
+  permitted_colors:
+    test_id: "CV_001"
+    description: "Color compliance validation"
+    color_tests:
+      - name: "basic_color_validation"
+        rule: "color IN ['white', 'yellow', 'blue'] WHERE blue only for parking zones"
+        test_cases:
+          - input: {color: "white", marking_type: "lane_line"}
+            expected: true
+          - input: {color: "yellow", marking_type: "parking_restriction"}
+            expected: true
+          - input: {color: "blue", marking_type: "parking_zone"}
+            expected: true
+          - input: {color: "blue", marking_type: "lane_line"}
+            expected: false
+            reason: "Blue only permitted for parking zones"
+          - input: {color: "red", marking_type: "stop_line"}
+            expected: false
+            reason: "Red not permitted color"
+
+# 5. CV IMPLEMENTATION TESTS
+cv_implementation:
+
+  mask_validation:
+    test_id: "CVI_001"
+    description: "Computer vision processing validation"
+    cv_tests:
+      - name: "road_overlap_ratio"
+        rule: "road_overlap_ratio >= 0.6"
+        test_cases:
+          - input: {road_overlap_ratio: 0.5}
+            expected: false
+          - input: {road_overlap_ratio: 0.6}
+            expected: true
+          - input: {road_overlap_ratio: 0.8}
+            expected: true
+            
+      - name: "minimum_area_fraction"
+        rule: "area_fraction >= 0.001 AND area_fraction <= 0.003"
+        test_cases:
+          - input: {area_fraction: 0.0005}
+            expected: false
+          - input: {area_fraction: 0.001}
+            expected: true
+          - input: {area_fraction: 0.002}
+            expected: true
+          - input: {area_fraction: 0.005}
+            expected: false
+
+  tophat_kernel:
+    test_id: "CVI_002"
+    description: "Top-hat morphological operation validation"
+    cv_tests:
+      - name: "kernel_size_range"
+        rule: "kernel_size_px >= 17 AND kernel_size_px <= 31 AND kernel_size_px % 2 == 1"
+        test_cases:
+          - input: {kernel_size_px: 15}
+            expected: false
+          - input: {kernel_size_px: 16}
+            expected: false
+            reason: "Must be odd"
+          - input: {kernel_size_px: 17}
+            expected: true
+          - input: {kernel_size_px: 25}
+            expected: true
+          - input: {kernel_size_px: 31}
+            expected: true
+          - input: {kernel_size_px: 33}
+            expected: false
+
+# 6. PERFORMANCE TESTS (EN 1436)
+performance_tests:
+
+  retro_reflection:
+    test_id: "PT_001"
+    description: "Retro-reflection performance validation"
+    performance_tests:
+      - name: "retro_reflection_classes"
+        rule: "R2 >= 100 OR R3 >= 150 OR R4 >= 200 OR R5 >= 300 (mcd·lx⁻¹·m⁻²)"
+        test_cases:
+          - input: {class: "R2", value: 95}
+            expected: false
+          - input: {class: "R2", value: 100}
+            expected: true
+          - input: {class: "R3", value: 140}
+            expected: false
+          - input: {class: "R3", value: 150}
+            expected: true
+          - input: {class: "R4", value: 200}
+            expected: true
+          - input: {class: "R5", value: 300}
+            expected: true
+
+  visibility:
+    test_id: "PT_002"
+    description: "Visibility under diffuse light validation"
+    performance_tests:
+      - name: "visibility_classes"
+        rule: "Q2 >= 100 OR Q3 >= 130"
+        test_cases:
+          - input: {class: "Q2", value: 95}
+            expected: false
+          - input: {class: "Q2", value: 100}
+            expected: true
+          - input: {class: "Q3", value: 125}
+            expected: false
+          - input: {class: "Q3", value: 130}
+            expected: true
+
+  skid_resistance:
+    test_id: "PT_003"
+    description: "Skid resistance validation"
+    performance_tests:
+      - name: "skid_resistance_classes"
+        rule: "S1 >= 45 OR S2 >= 50 OR S3 >= 55 OR S4 >= 60 OR S5 >= 65"
+        test_cases:
+          - input: {class: "S1", value: 40}
+            expected: false
+          - input: {class: "S1", value: 45}
+            expected: true
+          - input: {class: "S3", value: 55}
+            expected: true
+          - input: {class: "S5", value: 65}
+            expected: true
+
+# 7. INTEGRATION TESTS
+integration_tests:
+
+  complete_marking_validation:
+    test_id: "IT_001"
+    description: "Complete road marking validation pipeline"
+    integration_scenarios:
+      - name: "normal_lane_line_complete"
+        input:
+          marking_type: "normal_broken_line"
+          color: "white"
+          width_m: 0.12
+          stroke_length_m: 1.5
+          gap_m: 3.0
+          road_overlap_ratio: 0.75
+        validation_steps:
+          - "color_validation"
+          - "geometry_validation"
+          - "cv_validation"
+        expected: true
+        
+      - name: "invalid_zebra_crossing"
+        input:
+          marking_type: "zebra_crossing"
+          color: "white"
+          stripe_width_m: 0.40
+          gap_width_m: 0.60
+          crossing_width_m: 2.0
+          v85_kph: 70
+        validation_steps:
+          - "color_validation"  # pass
+          - "geometry_validation"  # fail on width for high speed
+        expected: false
+        failure_reason: "Crossing width insufficient for v85 > 60 km/h"
+
+# 8. EDGE CASES AND ERROR CONDITIONS
+edge_cases:
+
+  boundary_conditions:
+    test_id: "EC_001"
+    description: "Test boundary conditions and edge cases"
+    edge_tests:
+      - name: "exact_minimum_values"
+        test_cases:
+          - input: {marking_type: "solid_line", width_m: 0.10}
+            expected: true
+          - input: {marking_type: "solid_line", width_m: 0.099999}
+            expected: false
+            
+      - name: "maximum_gap_limit"
+        test_cases:
+          - input: {marking_type: "normal_broken_line", stroke_length_m: 1.0, gap_m: 12.0}
+            expected: true
+          - input: {marking_type: "normal_broken_line", stroke_length_m: 1.0, gap_m: 12.1}
+            expected: false
+
+  data_quality:
+    test_id: "EC_002"
+    description: "Data quality and completeness validation"
+    quality_tests:
+      - name: "missing_required_fields"
+        test_cases:
+          - input: {marking_type: "solid_line"}  # missing width_m
+            expected: false
+            reason: "Required field width_m missing"
+          - input: {width_m: 0.12}  # missing marking_type
+            expected: false
+            reason: "Required field marking_type missing"
+            
+      - name: "invalid_data_types"
+        test_cases:
+          - input: {marking_type: "solid_line", width_m: "wide"}
+            expected: false
+            reason: "width_m must be numeric"
+          - input: {marking_type: 123, width_m: 0.12}
+            expected: false
+            reason: "marking_type must be string"
+
+# Test execution metadata
+metadata:
+  standard_reference: "UNECE Vienna Convention (European Agreement & 1973 Protocol on Road Markings)"
+  performance_reference: "CEN EN 1436, EN 1871, EN 1423, EN 1424, EN 1790, EN 1824"
+  units: "metres (m) unless specified otherwise"
+  coordinate_system: "pixels_per_meter (PPM) for non-georeferenced rasters"
+  test_coverage:
+    longitudinal_markings: 4
+    transverse_markings: 5
+    other_markings: 2
+    color_validation: 1
+    cv_implementation: 2
+    performance_tests: 3
+    integration_tests: 1
+    edge_cases: 2
+  total_test_cases: 89
