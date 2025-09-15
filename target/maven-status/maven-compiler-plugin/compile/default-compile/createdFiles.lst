@@ -1,6 +1,5 @@
 com/example/lanes/api/LaneController.class
-com/example/lanes/core/OverlayResult.class
-com/example/lanes/core/LanePolygonService$LaneRegion.class
 com/example/lanes/core/OverlayResult$Polygon.class
 com/example/lanes/core/LanePolygonService.class
 com/example/lanes/LanePolygonsApplication.class
+com/example/lanes/core/OverlayResult.class
