@@ -1,0 +1,60 @@
+- id: lane_guidance_broken
+  tags: [lane, broken]
+  params:
+    lane_width_m: [2.8, 4.0]      # used to set dilation thickness if present
+    stroke_m: [1.0, 3.0]
+    gap_m: [3.0, 12.0]
+    line_width_m: [0.10, 0.15]
+  checks:
+    - "width_m >= 0.10"
+    - "gap_m / stroke_m >= 2 and gap_m / stroke_m <= 4"
+
+- id: solid_line
+  tags: [lane, solid]
+  params:
+    line_width_m: [0.10, 0.20]
+  checks:
+    - "width_m >= 0.10"
+    - "continuous_m >= 20"
+
+- id: zebra_crossing
+  tags: [zebra]
+  params:
+    stripe_gap_period_m: [0.80, 1.40]
+    crossing_width_m: [2.5, 5.0]
+  checks:
+    - "(stripe_m + gap_m) >= 0.80 and (stripe_m + gap_m) <= 1.40"
+    - "abs(stripe_m - gap_m) / max(stripe_m, gap_m) <= 0.25"
+    - "crossing_width_m >= 2.5"
+
+- id: stop_line
+  tags: [transverse, stop]
+  params:
+    bar_width_m: [0.25, 0.40]
+  checks:
+    - "bar_width_m >= 0.25 and bar_width_m <= 0.40"
+
+- id: give_way_triangles
+  tags: [transverse, yield]
+  params:
+    triangle_base_m: [0.40, 0.60]
+    triangle_height_m: [0.60, 0.70]
+  checks:
+    - "base_m >= 0.40 and base_m <= 0.60"
+    - "height_m >= 0.60 and height_m <= 0.70"
+
+- id: edge_line_motorway
+  tags: [lane, edge, motorway]
+  params:
+    line_width_m: [0.15, 0.20]
+  checks:
+    - "width_m >= 0.15"
+
+- id: broken_warning_line
+  tags: [lane, broken, warning]
+  params:
+    stroke_to_gap: [2.0, 4.0]
+    line_width_m: [0.10, 0.15]
+  checks:
+    - "stroke_m / gap_m >= 2.0 and stroke_m / gap_m <= 4.0"
+    - "width_m >= 0.10"

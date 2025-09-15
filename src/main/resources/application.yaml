@@ -1,0 +1,18 @@
+lanes:
+  useVision: false             # LiDAR-only (no OCR)
+  ppm: 5.0                     # pixels-per-meter; set from dataset or GeoTIFF
+  minAreaFrac: 0.0015          # min contour area as fraction of H*W
+  epsilonFrac: 0.012           # approxPolyDP fraction (shape simplification)
+  roadOverlapMin: 0.65         # polygon must lie mostly on road mask
+  kernel:
+    lengthFrac: 0.08           # rotated dilation kernel length ≈ 6–10% of max(H,W)
+    thickFrac: 0.02            # band thickness; may be overridden by lane width rule
+  tophat:
+    kernelPx: 21               # 17–31 typical (odd only)
+  debugFrames: true            # enable /debug ZIP with masks & overlay
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB

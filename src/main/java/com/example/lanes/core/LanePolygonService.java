@@ -1,220 +1,384 @@
 package com.example.lanes.core;
 
+import com.example.lanes.config.LaneConfig;
+import com.example.lanes.model.DebugFrames;
+import com.example.lanes.model.PolygonDto;
+import com.example.lanes.rag.Rule;
+import com.example.lanes.rag.RuleSuiteLoader;
+import com.example.lanes.rag.RuleValidator;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
-import org.bytedeco.javacpp.indexer.IntIndexer;
-import org.bytedeco.javacpp.indexer.FloatRawIndexer;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.opencv.opencv_core.*;
-import org.bytedeco.opencv.opencv_imgproc.*;
-import static org.bytedeco.opencv.global.opencv_core.*;
-import static org.bytedeco.opencv.global.opencv_imgproc.*;
-import static org.bytedeco.opencv.global.opencv_imgcodecs.*;
+import org.bytedeco.opencv.opencv_imgproc.CLAHE;
+import org.bytedeco.opencv.opencv_imgproc.Vec4iVector;
+import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+
+import static org.bytedeco.opencv.global.opencv_core.*;
+import static org.bytedeco.opencv.global.opencv_imgcodecs.*;
+import static org.bytedeco.opencv.global.opencv_imgproc.*;
 
 @Service
 @RequiredArgsConstructor
 public class LanePolygonService {
 
-  @Value("${lanes.minAreaFrac:0.00005}") private double minAreaFrac;  // Very small
-  @Value("${lanes.maxAreaFrac:0.05}") private double maxAreaFrac;    // Not too large
+    private final LaneConfig config;
+    private final RuleSuiteLoader ruleSuiteLoader;
+    private final RuleValidator ruleValidator;
+    private List<Rule> rules;
 
-  public OverlayResult process(byte[] imageBytes) {
-    // Decode image
-    Mat buf = new Mat(1, imageBytes.length, CV_8U);
-    buf.data().put(imageBytes);
-    Mat img = imdecode(buf, IMREAD_COLOR);
-    if (img == null || img.empty()) throw new IllegalArgumentException("Invalid image");
-
-    int H = img.rows(), W = img.cols();
-    double minArea = minAreaFrac * H * W;
-    double maxArea = maxAreaFrac * H * W;
-
-    List<OverlayResult.Polygon> polysOut = new ArrayList<>();
-    Mat vis = img.clone();
-
-    // Convert to grayscale
-    Mat gray = new Mat();
-    cvtColor(img, gray, COLOR_BGR2GRAY);
-
-    // AGGRESSIVE WHITE DETECTION - Multiple approaches combined
-    
-    // 1. Direct bright thresholding - multiple levels
-    Mat bright1 = new Mat();
-    threshold(gray, bright1, 140, 255, THRESH_BINARY);
-    
-    Mat bright2 = new Mat();  
-    threshold(gray, bright2, 160, 255, THRESH_BINARY);
-    
-    Mat bright3 = new Mat();
-    threshold(gray, bright3, 180, 255, THRESH_BINARY);
-
-    // 2. CLAHE enhanced detection
-    CLAHE clahe = createCLAHE(5.0, new Size(8, 8)); // Very high contrast
-    Mat enhanced = new Mat();
-    clahe.apply(gray, enhanced);
-    
-    Mat brightEnhanced = new Mat();
-    threshold(enhanced, brightEnhanced, 150, 255, THRESH_BINARY);
-
-    // 3. Multiple top-hat filters for different marking sizes
-    Mat tophat1 = new Mat();
-    morphologyEx(enhanced, tophat1, MORPH_TOPHAT, getStructuringElement(MORPH_RECT, new Size(7, 7)));
-    
-    Mat tophat2 = new Mat();
-    morphologyEx(enhanced, tophat2, MORPH_TOPHAT, getStructuringElement(MORPH_RECT, new Size(15, 15)));
-    
-    Mat tophat3 = new Mat();
-    morphologyEx(enhanced, tophat3, MORPH_TOPHAT, getStructuringElement(MORPH_RECT, new Size(25, 25)));
-    
-    Mat tophatCombined = new Mat();
-    bitwise_or(tophat1, tophat2, tophatCombined);
-    bitwise_or(tophatCombined, tophat3, tophatCombined);
-    
-    Mat tophatThresh = new Mat();
-    threshold(tophatCombined, tophatThresh, 0, 255, THRESH_BINARY | THRESH_OTSU);
-
-    // 4. HSV white detection with multiple ranges
-    Mat combinedMask = new Mat();
-    if (img.channels() == 3) {
-      Mat hsv = new Mat();
-      cvtColor(img, hsv, COLOR_BGR2HSV);
-      
-      // Very permissive white detection
-      Mat hsvWhite1 = new Mat();
-      Mat whiteLow1 = new Mat(new Scalar(0, 0, 150, 0));
-      Mat whiteHigh1 = new Mat(new Scalar(180, 50, 255, 0));
-      inRange(hsv, whiteLow1, whiteHigh1, hsvWhite1);
-      
-      // Strict white detection  
-      Mat hsvWhite2 = new Mat();
-      Mat whiteLow2 = new Mat(new Scalar(0, 0, 200, 0));
-      Mat whiteHigh2 = new Mat(new Scalar(180, 30, 255, 0));
-      inRange(hsv, whiteLow2, whiteHigh2, hsvWhite2);
-      
-      // Combine all masks
-      bitwise_or(bright1, bright2, combinedMask);
-      bitwise_or(combinedMask, bright3, combinedMask);
-      bitwise_or(combinedMask, brightEnhanced, combinedMask);
-      bitwise_or(combinedMask, tophatThresh, combinedMask);
-      bitwise_or(combinedMask, hsvWhite1, combinedMask);
-      bitwise_or(combinedMask, hsvWhite2, combinedMask);
-    } else {
-      // Grayscale image
-      bitwise_or(bright1, bright2, combinedMask);
-      bitwise_or(combinedMask, bright3, combinedMask);
-      bitwise_or(combinedMask, brightEnhanced, combinedMask);
-      bitwise_or(combinedMask, tophatThresh, combinedMask);
-    }
-
-    // Light cleanup - preserve small features
-    Mat cleanKernel = getStructuringElement(MORPH_ELLIPSE, new Size(2, 2));
-    morphologyEx(combinedMask, combinedMask, MORPH_OPEN, cleanKernel);
-
-    // Find all contours - be very permissive
-    MatVector contours = new MatVector();
-    Mat hierarchy = new Mat();
-    findContours(combinedMask, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-
-    // Process every contour with minimal filtering
-    for (long i = 0; i < contours.size(); i++) {
-      Mat c = contours.get(i);
-      double area = contourArea(c);
-      
-      // Very permissive area filtering
-      if (area < minArea || area > maxArea) continue;
-      
-      Rect boundingRect = boundingRect(c);
-      
-      // Very permissive size filtering - accept almost anything reasonable
-      if (boundingRect.width() < 5 || boundingRect.height() < 5) continue;
-      if (boundingRect.width() > W/2 || boundingRect.height() > H/2) continue;
-      
-      // Create tight bounding rectangle
-      List<int[]> pts = new ArrayList<>();
-      pts.add(new int[]{boundingRect.x(), boundingRect.y()});
-      pts.add(new int[]{boundingRect.x() + boundingRect.width(), boundingRect.y()});
-      pts.add(new int[]{boundingRect.x() + boundingRect.width(), boundingRect.y() + boundingRect.height()});
-      pts.add(new int[]{boundingRect.x(), boundingRect.y() + boundingRect.height()});
-      
-      // Draw bright green rectangle
-      rectangle(vis, new Point(boundingRect.x(), boundingRect.y()), 
-               new Point(boundingRect.x() + boundingRect.width(), 
-                        boundingRect.y() + boundingRect.height()), 
-               new Scalar(0, 255, 0, 0), 2);
-      
-      polysOut.add(new OverlayResult.Polygon(pts, area));
-    }
-
-    // Additional edge-based detection for missed markings
-    Mat edges = new Mat();
-    Canny(enhanced, edges, 30, 100); // Very sensitive edge detection
-    
-    // Fill edges to create shapes
-    Mat edgeKernel = getStructuringElement(MORPH_RECT, new Size(3, 3));
-    dilate(edges, edges, edgeKernel);
-    morphologyEx(edges, edges, MORPH_CLOSE, edgeKernel);
-    
-    MatVector edgeContours = new MatVector();
-    Mat edgeHierarchy = new Mat();
-    findContours(edges, edgeContours, edgeHierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-    
-    for (long i = 0; i < edgeContours.size(); i++) {
-      Mat c = edgeContours.get(i);
-      double area = contourArea(c);
-      
-      if (area < minArea * 0.5 || area > maxArea * 0.3) continue;
-      
-      Rect boundingRect = boundingRect(c);
-      
-      if (boundingRect.width() < 8 || boundingRect.height() < 8) continue;
-      if (boundingRect.width() > W/3 || boundingRect.height() > H/3) continue;
-      
-      // Check if this is a duplicate (too close to existing)
-      boolean isDuplicate = false;
-      int centerX = boundingRect.x() + boundingRect.width()/2;
-      int centerY = boundingRect.y() + boundingRect.height()/2;
-      
-      for (OverlayResult.Polygon existing : polysOut) {
-        List<int[]> existingPts = existing.points();
-        if (existingPts.size() >= 4) {
-          int existingCenterX = (existingPts.get(0)[0] + existingPts.get(2)[0]) / 2;
-          int existingCenterY = (existingPts.get(0)[1] + existingPts.get(2)[1]) / 2;
-          double dist = Math.sqrt(Math.pow(centerX - existingCenterX, 2) + Math.pow(centerY - existingCenterY, 2));
-          if (dist < 30) { // 30 pixel threshold
-            isDuplicate = true;
-            break;
-          }
+    public OverlayResult process(byte[] imageBytes, Double overridePpm) {
+        double ppm = overridePpm != null ? overridePpm : config.getPpm();
+        
+        // Load rules if not already loaded
+        if (rules == null) {
+            rules = ruleSuiteLoader.loadDefaultRules();
         }
-      }
-      
-      if (!isDuplicate) {
-        List<int[]> pts = new ArrayList<>();
-        pts.add(new int[]{boundingRect.x(), boundingRect.y()});
-        pts.add(new int[]{boundingRect.x() + boundingRect.width(), boundingRect.y()});
-        pts.add(new int[]{boundingRect.x() + boundingRect.width(), boundingRect.y() + boundingRect.height()});
-        pts.add(new int[]{boundingRect.x(), boundingRect.y() + boundingRect.height()});
-        
-        // Draw bright green rectangle
-        rectangle(vis, new Point(boundingRect.x(), boundingRect.y()), 
-                 new Point(boundingRect.x() + boundingRect.width(), 
-                          boundingRect.y() + boundingRect.height()), 
-                 new Scalar(0, 255, 0, 0), 2);
-        
-        polysOut.add(new OverlayResult.Polygon(pts, area));
-      }
+
+        // Decode image to grayscale
+        Mat buf = new Mat(1, imageBytes.length, CV_8U);
+        buf.data().put(imageBytes);
+        Mat gray = imdecode(buf, IMREAD_GRAYSCALE);
+        if (gray == null || gray.empty()) {
+            throw new IllegalArgumentException("Invalid image");
+        }
+
+        // Apply CLAHE for contrast enhancement
+        Mat enhanced = applyCLAHE(gray);
+
+        // Build masks
+        Mat roadMask = buildRoadMask(enhanced);
+        Mat marksMask = buildMarksMask(enhanced, roadMask);
+
+        // Estimate dominant direction
+        double theta = estimateHeading(enhanced, roadMask);
+
+        // Grow bands using anisotropic dilation
+        Mat bands = growBands(marksMask, theta, ppm);
+
+        // Find and classify polygons
+        List<PolygonDto> polygons = findPolygons(bands, roadMask, enhanced, marksMask, ppm);
+
+        // Draw overlay
+        byte[] overlayPng = drawOverlay(gray, polygons);
+
+        return new OverlayResult(polygons, overlayPng);
     }
 
-    // Encode to PNG
-    BytePointer pngData = new BytePointer();
-    imencode(".png", vis, pngData);
-    byte[] pngBytes = new byte[(int) pngData.capacity()];
-    pngData.get(pngBytes);
+    public DebugFrames processWithDebug(byte[] imageBytes) {
+        // Similar to process but returns debug frames
+        Mat buf = new Mat(1, imageBytes.length, CV_8U);
+        buf.data().put(imageBytes);
+        Mat gray = imdecode(buf, IMREAD_GRAYSCALE);
+        
+        Mat enhanced = applyCLAHE(gray);
+        Mat roadMask = buildRoadMask(enhanced);
+        Mat marksMask = buildMarksMask(enhanced, roadMask);
+        double theta = estimateHeading(enhanced, roadMask);
+        Mat bands = growBands(marksMask, theta, config.getPpm());
+        List<PolygonDto> polygons = findPolygons(bands, roadMask, enhanced, marksMask, config.getPpm());
+        
+        byte[] roadPng = matToPng(roadMask);
+        byte[] marksPng = matToPng(marksMask);
+        byte[] bandsPng = matToPng(bands);
+        byte[] overlayPng = drawOverlay(gray, polygons);
+        
+        return new DebugFrames(roadPng, marksPng, bandsPng, overlayPng);
+    }
 
-    return new OverlayResult(polysOut, pngBytes);
-  }
+    private Mat applyCLAHE(Mat gray) {
+        CLAHE clahe = createCLAHE(3.0, new Size(8, 8));
+        Mat enhanced = new Mat();
+        clahe.apply(gray, enhanced);
+        return enhanced;
+    }
+
+    private Mat buildRoadMask(Mat enhanced) {
+        // Road is darker than background - inverse threshold
+        Mat roadMask = new Mat();
+        threshold(enhanced, roadMask, 0, 255, THRESH_BINARY_INV | THRESH_OTSU);
+
+        // Morphological operations to clean up
+        Mat kernel9 = getStructuringElement(MORPH_RECT, new Size(9, 9));
+        Mat kernel5 = getStructuringElement(MORPH_RECT, new Size(5, 5));
+        
+        morphologyEx(roadMask, roadMask, MORPH_CLOSE, kernel9);
+        morphologyEx(roadMask, roadMask, MORPH_OPEN, kernel5);
+
+        // Keep only large components (remove noise)
+        roadMask = keepLargeComponents(roadMask, enhanced.rows() * enhanced.cols() * 0.01);
+        
+        return roadMask;
+    }
+
+    private Mat buildMarksMask(Mat enhanced, Mat roadMask) {
+        // Top-hat to extract bright markings
+        int kernelSize = config.getTophat().getKernelPx();
+        Mat tophatKernel = getStructuringElement(MORPH_RECT, new Size(kernelSize, kernelSize));
+        Mat tophat = new Mat();
+        morphologyEx(enhanced, tophat, MORPH_TOPHAT, tophatKernel);
+
+        // Threshold to binary
+        Mat marksMask = new Mat();
+        threshold(tophat, marksMask, 0, 255, THRESH_BINARY | THRESH_OTSU);
+
+        // Constrain to road area
+        bitwise_and(marksMask, roadMask, marksMask);
+
+        return marksMask;
+    }
+
+    private double estimateHeading(Mat enhanced, Mat roadMask) {
+        // Detect edges
+        Mat edges = new Mat();
+        Canny(enhanced, edges, 50, 150);
+        
+        // Mask edges to road area
+        bitwise_and(edges, roadMask, edges);
+
+        // Hough lines to find dominant direction
+        Vec4iVector lines = new Vec4iVector();
+        HoughLinesP(edges, lines, 1, Math.PI / 180, 50, 50, 10);
+
+        if (lines.size() == 0) {
+            return 0.0; // Default to horizontal
+        }
+
+        // Average the angles
+        double sumTheta = 0;
+        int count = 0;
+        for (long i = 0; i < Math.min(lines.size(), 10); i++) {
+            int x1 = (int)lines.get(i).get(0);
+            int y1 = (int)lines.get(i).get(1);
+            int x2 = (int)lines.get(i).get(2);
+            int y2 = (int)lines.get(i).get(3);
+            
+            double theta = Math.atan2(y2 - y1, x2 - x1);
+            sumTheta += theta;
+            count++;
+        }
+
+        return count > 0 ? sumTheta / count : 0.0;
+    }
+
+    private Mat growBands(Mat marksMask, double theta, double ppm) {
+        int H = marksMask.rows();
+        int W = marksMask.cols();
+        int maxDim = Math.max(H, W);
+
+        // Calculate kernel dimensions
+        int kernelLength = (int)(maxDim * config.getKernel().getLengthFrac());
+        
+        // Get lane width from rules if available
+        double laneWidthM = ruleValidator.getLaneWidthFromRules(rules);
+        int kernelThickness = (int)(laneWidthM * ppm * 0.3); // Use 30% of lane width
+        
+        if (kernelThickness < 3) kernelThickness = 3;
+        if (kernelThickness % 2 == 0) kernelThickness++; // Make odd
+
+        // Create rotated kernel
+        Mat kernel = createRotatedKernel(kernelLength, kernelThickness, theta);
+
+        // Anisotropic dilation
+        Mat bands = new Mat();
+        dilate(marksMask, bands, kernel);
+
+        // Additional morphological operations
+        Mat closeKernel = getStructuringElement(MORPH_RECT, new Size(15, 15));
+        morphologyEx(bands, bands, MORPH_CLOSE, closeKernel);
+        
+        medianBlur(bands, bands, 7);
+
+        return bands;
+    }
+
+    private Mat createRotatedKernel(int length, int thickness, double theta) {
+        // Create a horizontal line kernel
+        Mat kernel = Mat.zeros(thickness, length, CV_8U).asMat();
+        rectangle(kernel, new Rect(0, 0, length, thickness), 
+                 new Scalar(255, 0, 0, 0), -1, LINE_8, 0);
+
+        // Rotate the kernel
+        Point2f center = new Point2f(length / 2.0f, thickness / 2.0f);
+        Mat rotMatrix = getRotationMatrix2D(center, Math.toDegrees(theta), 1.0);
+        
+        Mat rotatedKernel = new Mat();
+        warpAffine(kernel, rotatedKernel, rotMatrix, kernel.size());
+
+        // Threshold to binary
+        threshold(rotatedKernel, rotatedKernel, 127, 255, THRESH_BINARY);
+
+        return rotatedKernel;
+    }
+
+    private List<PolygonDto> findPolygons(Mat bands, Mat roadMask, Mat enhanced, 
+                                          Mat marksMask, double ppm) {
+        List<PolygonDto> polygons = new ArrayList<>();
+        
+        int H = bands.rows();
+        int W = bands.cols();
+        double minArea = config.getMinAreaFrac() * H * W;
+
+        // Find contours
+        MatVector contours = new MatVector();
+        Mat hierarchy = new Mat();
+        findContours(bands, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+        for (long i = 0; i < contours.size(); i++) {
+            Mat contour = contours.get(i);
+            double area = contourArea(contour);
+
+            // Filter by area
+            if (area < minArea) continue;
+
+            // Check road overlap
+            if (!checkRoadOverlap(contour, roadMask)) continue;
+
+            // Get bounding rectangle
+            RotatedRect rr = minAreaRect(contour);
+            
+            // Extract points
+            Point2f vertices = new Point2f(4);
+            rr.points(vertices);
+            
+            List<int[]> points = new ArrayList<>();
+            for (int j = 0; j < 4; j++) {
+                points.add(new int[]{
+                    (int)vertices.position(j).x(),
+                    (int)vertices.position(j).y()
+                });
+            }
+
+            // Extract features
+            Map<String, Double> features = extractFeatures(rr, contour, marksMask, ppm);
+
+            // Validate against rules
+            List<String> ruleIds = ruleValidator.validatePolygon(features, rules);
+
+            // Determine type based on features
+            String type = determineType(features, ruleIds);
+
+            polygons.add(new PolygonDto(type, points, area, features, ruleIds));
+        }
+
+        return polygons;
+    }
+
+    private boolean checkRoadOverlap(Mat contour, Mat roadMask) {
+        // Create mask from contour
+        Mat contourMask = Mat.zeros(roadMask.size(), CV_8U).asMat();
+        MatVector contourVec = new MatVector(contour);
+        drawContours(contourMask, contourVec, -1, new Scalar(255, 0, 0, 0), -1, LINE_8, new Mat(), 0, new Point());
+
+        // Calculate intersection
+        Mat intersection = new Mat();
+        bitwise_and(contourMask, roadMask, intersection);
+
+        double intersectionArea = countNonZero(intersection);
+        double contourArea = countNonZero(contourMask);
+
+        return (intersectionArea / contourArea) >= config.getRoadOverlapMin();
+    }
+
+    private Map<String, Double> extractFeatures(RotatedRect rr, Mat contour, 
+                                                Mat marksMask, double ppm) {
+        Map<String, Double> features = new HashMap<>();
+
+        // Basic dimensions
+        double width = Math.min(rr.size().width(), rr.size().height());
+        double length = Math.max(rr.size().width(), rr.size().height());
+
+        features.put("width_m", width / ppm);
+        features.put("length_m", length / ppm);
+        features.put("area_m2", contourArea(contour) / (ppm * ppm));
+
+        // For broken lines, extract stroke and gap patterns
+        // This is simplified - in production, implement proper line profiling
+        features.put("stroke_m", 2.0); // Placeholder
+        features.put("gap_m", 6.0); // Placeholder
+        features.put("continuous_m", length / ppm);
+
+        return features;
+    }
+
+    private String determineType(Map<String, Double> features, List<String> ruleIds) {
+        // Determine polygon type based on features and matched rules
+        if (!ruleIds.isEmpty()) {
+            String firstRule = ruleIds.get(0);
+            if (firstRule.contains("zebra")) return "zebra_crossing";
+            if (firstRule.contains("stop")) return "stop_line";
+            if (firstRule.contains("give_way")) return "give_way";
+            if (firstRule.contains("solid")) return "solid_line";
+            if (firstRule.contains("broken")) return "broken_line";
+            if (firstRule.contains("edge")) return "edge_line";
+        }
+
+        // Default based on dimensions
+        double widthM = features.getOrDefault("width_m", 0.0);
+        double lengthM = features.getOrDefault("length_m", 0.0);
+        
+        if (lengthM > 10 && widthM < 5) {
+            return "lane_leg";
+        } else if (widthM > 2 && lengthM < 10) {
+            return "transverse_marking";
+        }
+        
+        return "unknown";
+    }
+
+    private Mat keepLargeComponents(Mat mask, double minComponentArea) {
+        MatVector contours = new MatVector();
+        Mat hierarchy = new Mat();
+        findContours(mask.clone(), contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+        Mat result = Mat.zeros(mask.size(), CV_8U).asMat();
+        
+        for (long i = 0; i < contours.size(); i++) {
+            double area = contourArea(contours.get(i));
+            if (area >= minComponentArea) {
+                MatVector singleContour = new MatVector(contours.get(i));
+                drawContours(result, singleContour, -1, new Scalar(255, 0, 0, 0), -1, LINE_8, new Mat(), 0, new Point());
+            }
+        }
+
+        return result;
+    }
+
+    private byte[] drawOverlay(Mat gray, List<PolygonDto> polygons) {
+        // Convert to color for visualization
+        Mat vis = new Mat();
+        cvtColor(gray, vis, COLOR_GRAY2BGR);
+
+        // Draw each polygon in red
+        for (PolygonDto polygon : polygons) {
+            List<int[]> points = polygon.points();
+            if (points.size() >= 3) {
+                for (int i = 0; i < points.size(); i++) {
+                    int j = (i + 1) % points.size();
+                    line(vis, 
+                         new Point(points.get(i)[0], points.get(i)[1]),
+                         new Point(points.get(j)[0], points.get(j)[1]),
+                         new Scalar(0, 0, 255, 0), 2, LINE_8, 0); // Red color
+                }
+            }
+        }
+
+        return matToPng(vis);
+    }
+
+    private byte[] matToPng(Mat mat) {
+        BytePointer pngData = new BytePointer();
+        imencode(".png", mat, pngData);
+        byte[] pngBytes = new byte[(int) pngData.capacity()];
+        pngData.get(pngBytes);
+        return pngBytes;
+    }
+
+    public List<Rule> getRules() {
+        if (rules == null) {
+            rules = ruleSuiteLoader.loadDefaultRules();
+        }
+        return rules;
+    }
 }
