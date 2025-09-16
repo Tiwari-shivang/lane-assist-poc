@@ -1,0 +1,4 @@
+---
+invalid_yaml_structure:
+  - this is not valid yaml for Rule objects
+  - missing required fields

@@ -1,0 +1,7 @@
+---
+- id: "valid_rule"
+  tags: ["valid"]
+- id: "malformed_rule"
+  tags: [invalid, yaml, structure, without, quotes
+  params:
+    incomplete_param: [1.0

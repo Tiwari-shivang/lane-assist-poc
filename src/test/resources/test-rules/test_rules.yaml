@@ -1,0 +1,30 @@
+---
+- id: "test_rule_1"
+  tags:
+    - "lane_marking"
+    - "eu_standard"
+  params:
+    width_range_m: [0.10, 0.15]
+    length_range_m: [1.0, 50.0]
+  checks:
+    - "width_m >= 0.10"
+    - "width_m <= 0.15"
+
+- id: "test_rule_2"
+  tags:
+    - "edge_line"
+    - "motorway"
+  params:
+    width_range_m: [0.15, 0.20]
+  checks:
+    - "width_m >= 0.15"
+
+- id: "test_rule_3"
+  tags:
+    - "broken_line"
+  params:
+    stroke_length_m: [1.5, 3.0]
+    gap_length_m: [3.0, 9.0]
+  checks:
+    - "stroke_length_m >= 1.5"
+    - "gap_length_m >= 3.0"

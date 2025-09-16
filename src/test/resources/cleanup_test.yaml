@@ -1,0 +1,3 @@
+---
+- id: "cleanup_test_rule"
+  tags: ["cleanup"]

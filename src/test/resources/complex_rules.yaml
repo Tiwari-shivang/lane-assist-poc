@@ -1,0 +1,27 @@
+---
+- id: "complex_rule_1"
+  tags:
+    - "lane_marking"
+    - "complex"
+    - "test"
+  params:
+    width_range_m: [0.08, 0.20]
+    length_range_m: [0.5, 100.0]
+    aspect_ratio_range: [0.01, 0.50]
+    lane_width_m: [2.5, 4.0]
+  checks:
+    - "width_m >= 0.08"
+    - "width_m <= 0.20"
+    - "length_m >= 0.5"
+    - "aspect_ratio >= 0.01 and aspect_ratio <= 0.50"
+    - "(width_m * length_m) >= 0.1"
+
+- id: "minimal_rule"
+  tags: []
+  params: {}
+  checks: []
+
+- id: "rule_with_nulls"
+  tags: null
+  params: null
+  checks: null

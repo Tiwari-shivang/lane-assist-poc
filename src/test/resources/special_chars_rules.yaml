@@ -1,0 +1,23 @@
+---
+- id: "rule_with_special_chars"
+  tags:
+    - "tag-with-dashes"
+    - "tag_with_underscores"
+    - "tag.with.dots"
+    - "tag with spaces"
+    - "UPPERCASE_TAG"
+    - "123numeric_tag"
+    - ""
+  params:
+    "param-with-dashes": [1.0, 2.0]
+    "param_with_underscores": [3.0, 4.0]
+    "param.with.dots": [5.0, 6.0]
+    "param with spaces": [7.0, 8.0]
+    "123numeric_param": [9.0, 10.0]
+  checks:
+    - "value-with-dashes >= 1.0"
+    - "value_with_underscores <= 10.0"
+    - "value.with.dots > 0.0"
+    - "value with spaces < 100.0"
+    - "123numeric_value >= 0.0"
+    - ""

@@ -1,0 +1,7 @@
+---
+- id: "single_rule"
+  tags: ["single"]
+  params:
+    single_param: [1.0]
+  checks:
+    - "single_check >= 1.0"
