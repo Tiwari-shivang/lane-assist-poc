@@ -15,15 +15,19 @@ lanes:
   debugFrames: true            # enable /debug ZIP with masks & overlay
 
 polygons:
-  ppm: 5.0                     # used only when input is already an image
-  minAreaFrac: 0.0015
-  epsilonFrac: 0.012
-  roadOverlapMin: 0.65
+  ppm: 5.0                     # Legacy setting (backward compatibility)
+  defaultPpm: 5.0              # Default PPM for PNG-only processing
+  minAreaFrac: 0.0015          # Minimum contour area as fraction of H*W
+  epsilonFrac: 0.012           # ApproxPolyDP fraction for shape simplification
+  roadOverlapMin: 0.65         # Polygon must lie mostly on road mask
   kernel:
-    lengthFrac: 0.08
-    thickFrac: 0.02
+    lengthFrac: 0.08           # Rotated dilation kernel length (6-10% of max dimension)
+    thickFrac: 0.02            # Band thickness; may be overridden by lane width rule
   tophat:
-    kernelPx: 21
+    kernelPx: 21               # Top-hat kernel size (17-31 typical, odd only)
+  segmentation:
+    enabled: false             # Enable MaskRCNN segmentation fusion
+    url: http://inference:8000/infer
 
 spring:
   servlet:

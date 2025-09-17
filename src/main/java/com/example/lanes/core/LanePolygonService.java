@@ -455,4 +455,136 @@ public class LanePolygonService {
         
         return new OverlayResult(polygons, overlayBytes);
     }
+
+    // ============ PNG-Only Processing Methods (New) ============
+    
+    /**
+     * Process PNG image with optional segmentation mask
+     * Main PNG processing pipeline as specified in Png_try.md
+     */
+    public OverlayResult processPng(byte[] pngBytes, double ppm, Optional<byte[]> segmentationMask, boolean debug) {
+        // Load rules if not already loaded
+        if (rules == null) {
+            rules = ruleSuiteLoader.loadDefaultRules();
+        }
+
+        // Decode PNG to grayscale
+        Mat buf = new Mat(1, pngBytes.length, CV_8U);
+        buf.data().put(pngBytes);
+        Mat src = imdecode(buf, IMREAD_GRAYSCALE);
+        if (src == null || src.empty()) {
+            throw new IllegalArgumentException("Invalid PNG image");
+        }
+
+        // 1) Preprocess with CLAHE
+        Mat enhanced = applyCLAHE(src);
+
+        // 2) Road mask (asphalt darker): Otsu inverse + morph operations
+        Mat roadMask = buildRoadMask(enhanced);
+
+        // 3) Markings mask: Top-hat + Otsu + constrain to road
+        Mat marksMask = buildMarksMask(enhanced, roadMask);
+
+        // 3b) Fuse with segmentation mask if provided
+        if (segmentationMask.isPresent()) {
+            Mat probMask = decodeProbabilityMask(segmentationMask.get());
+            if (probMask != null) {
+                // Threshold probability mask
+                Mat segBin = new Mat();
+                threshold(probMask, segBin, 128, 255, THRESH_BINARY);
+                
+                // Fuse with classical markings (logical max)
+                max(marksMask, segBin, marksMask);
+                
+                segBin.release();
+                probMask.release();
+            }
+        }
+
+        // 4) Estimate dominant heading for anisotropic kernel
+        double theta = estimateHeading(enhanced, roadMask);
+
+        // 5) Anisotropic dilation to grow dashed lines into continuous bands
+        Mat bands = growBands(marksMask, theta, ppm);
+
+        // 6) Find contours, filter by area & road-overlap, simplify
+        List<PolygonDto> polygons = findPolygons(bands, roadMask, enhanced, marksMask, ppm);
+
+        // 7) RAG validation and classification already handled in findPolygons
+
+        // 8) Draw red overlay
+        byte[] overlayPng = drawOverlay(src, polygons);
+
+        // Cleanup
+        src.release();
+        enhanced.release();
+        roadMask.release();
+        marksMask.release();
+        bands.release();
+        buf.release();
+
+        return new OverlayResult(polygons, overlayPng);
+    }
+
+    /**
+     * Process PNG and return polygons only (no overlay image)
+     */
+    public List<PolygonDto> polygonsOnly(byte[] pngBytes, double ppm, Optional<byte[]> segmentationMask) {
+        OverlayResult result = processPng(pngBytes, ppm, segmentationMask, false);
+        return result.polygons();
+    }
+
+    /**
+     * Process PNG with debug mode - returns intermediate processing frames
+     */
+    public DebugFrames processWithDebug(byte[] pngBytes, double ppm) {
+        // Load rules if not already loaded
+        if (rules == null) {
+            rules = ruleSuiteLoader.loadDefaultRules();
+        }
+
+        // Decode PNG
+        Mat buf = new Mat(1, pngBytes.length, CV_8U);
+        buf.data().put(pngBytes);
+        Mat src = imdecode(buf, IMREAD_GRAYSCALE);
+        
+        // Process with intermediate steps
+        Mat enhanced = applyCLAHE(src);
+        Mat roadMask = buildRoadMask(enhanced);
+        Mat marksMask = buildMarksMask(enhanced, roadMask);
+        double theta = estimateHeading(enhanced, roadMask);
+        Mat bands = growBands(marksMask, theta, ppm);
+        List<PolygonDto> polygons = findPolygons(bands, roadMask, enhanced, marksMask, ppm);
+        
+        // Convert to PNG bytes for debug output
+        byte[] roadPng = matToPng(roadMask);
+        byte[] marksPng = matToPng(marksMask);
+        byte[] bandsPng = matToPng(bands);
+        byte[] overlayPng = drawOverlay(src, polygons);
+        
+        // Cleanup
+        src.release();
+        enhanced.release();
+        roadMask.release();
+        marksMask.release();
+        bands.release();
+        buf.release();
+        
+        return new DebugFrames(roadPng, marksPng, bandsPng, overlayPng);
+    }
+
+    /**
+     * Decode probability mask from segmentation service
+     */
+    private Mat decodeProbabilityMask(byte[] maskBytes) {
+        try {
+            Mat buf = new Mat(1, maskBytes.length, CV_8U);
+            buf.data().put(maskBytes);
+            Mat probMask = imdecode(buf, IMREAD_GRAYSCALE);
+            buf.release();
+            return probMask;
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }

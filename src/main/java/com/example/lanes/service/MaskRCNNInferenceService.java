@@ -14,7 +14,12 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.time.Duration;
+import java.util.Base64;
+import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class MaskRCNNInferenceService {
@@ -74,6 +79,45 @@ public class MaskRCNNInferenceService {
         } catch (Exception e) {
             logger.error("Error calling inference service", e);
             throw new InferenceServiceException("Failed to call inference service", e);
+        }
+    }
+    
+    /**
+     * Get segmentation mask from MaskRCNN service for PNG fusion
+     * Returns probability mask as PNG bytes for fusion with classical markings
+     */
+    public Optional<byte[]> getSegmentationMask(byte[] pngBytes) {
+        try {
+            // Create temporary file for the service
+            File tempFile = File.createTempFile("seg_", ".png");
+            Files.write(tempFile.toPath(), pngBytes);
+            
+            MultiValueMap<String, Object> parts = new LinkedMultiValueMap<>();
+            parts.add("file", new FileSystemResource(tempFile));
+            
+            // Call segmentation endpoint (assuming it returns mask_png_b64)
+            Map<String, Object> response = webClient.post()
+                    .uri("/segment")  // Different endpoint for pure segmentation
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(BodyInserters.fromMultipartData(parts))
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .block();
+            
+            tempFile.delete();
+            
+            if (response != null && response.containsKey("mask_png_b64")) {
+                String maskB64 = (String) response.get("mask_png_b64");
+                byte[] maskBytes = Base64.getDecoder().decode(maskB64);
+                return Optional.of(maskBytes);
+            }
+            
+            return Optional.empty();
+            
+        } catch (Exception e) {
+            logger.warn("Failed to get segmentation mask: {}", e.getMessage());
+            return Optional.empty();
         }
     }
     
