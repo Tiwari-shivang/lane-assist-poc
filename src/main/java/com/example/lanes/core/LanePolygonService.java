@@ -1,6 +1,8 @@
 package com.example.lanes.core;
 
 import com.example.lanes.config.LaneConfig;
+import com.example.lanes.dto.MaskRCNNPolygonDTO;
+import com.example.lanes.dto.MaskRCNNResponse;
 import com.example.lanes.model.DebugFrames;
 import com.example.lanes.model.PolygonDto;
 import com.example.lanes.rag.Rule;
@@ -18,6 +20,8 @@ import java.util.*;
 import static org.bytedeco.opencv.global.opencv_core.*;
 import static org.bytedeco.opencv.global.opencv_imgcodecs.*;
 import static org.bytedeco.opencv.global.opencv_imgproc.*;
+
+import org.bytedeco.javacpp.IntPointer;
 
 @Service
 @RequiredArgsConstructor
@@ -380,5 +384,75 @@ public class LanePolygonService {
             rules = ruleSuiteLoader.loadDefaultRules();
         }
         return rules;
+    }
+    
+    public OverlayResult processWithMaskRCNN(byte[] pngBytes, MaskRCNNResponse maskrcnnResponse) {
+        // Decode image
+        Mat image = imdecode(new Mat(pngBytes), IMREAD_COLOR);
+        if (image.empty()) {
+            throw new RuntimeException("Failed to decode image");
+        }
+        
+        // Convert MaskRCNN polygons to PolygonDto format
+        List<PolygonDto> polygons = new ArrayList<>();
+        
+        for (MaskRCNNPolygonDTO maskPolygon : maskrcnnResponse.polygons()) {
+            // Apply rule validation if enabled
+            List<String> appliedRules = new ArrayList<>();
+            boolean isValid = true;
+            
+            if (maskPolygon.isValidLaneMarking()) {
+                // Run basic rule validation
+                if (maskPolygon.widthM() >= 0.08 && maskPolygon.widthM() <= 0.20) {
+                    appliedRules.add("EU_LANE_WIDTH_STANDARD");
+                }
+                if (maskPolygon.areaM2() >= 0.1) {
+                    appliedRules.add("MINIMUM_AREA_THRESHOLD");
+                }
+            }
+            
+            Map<String, Double> features = new HashMap<>();
+            features.put("area_m2", maskPolygon.areaM2());
+            features.put("width_m", maskPolygon.widthM());
+            features.put("perimeter_m", maskPolygon.perimeterM());
+            features.put("score", maskPolygon.score());
+            
+            PolygonDto polygonDto = new PolygonDto(
+                maskPolygon.getMarkingType(),
+                maskPolygon.points(),
+                maskPolygon.areaPx(),
+                features,
+                appliedRules
+            );
+            
+            polygons.add(polygonDto);
+        }
+        
+        // Draw polygons on overlay
+        Mat overlay = image.clone();
+        
+        for (PolygonDto polygon : polygons) {
+            // Draw simple circle markers for detected polygons
+            for (int[] point : polygon.points()) {
+                circle(overlay, new Point(point[0], point[1]), 5, new Scalar(0, 0, 255, 0), -1, LINE_8, 0);
+            }
+            
+            // Draw polygon outline
+            for (int i = 0; i < polygon.points().size(); i++) {
+                int[] p1 = polygon.points().get(i);
+                int[] p2 = polygon.points().get((i + 1) % polygon.points().size());
+                line(overlay, new Point(p1[0], p1[1]), new Point(p2[0], p2[1]), 
+                     new Scalar(0, 0, 255, 0), 2, LINE_8, 0);
+            }
+        }
+        
+        // Encode result using existing method
+        byte[] overlayBytes = matToPng(overlay);
+        
+        // Cleanup
+        image.release();
+        overlay.release();
+        
+        return new OverlayResult(polygons, overlayBytes);
     }
 }

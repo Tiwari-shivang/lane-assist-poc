@@ -4,8 +4,11 @@ import com.example.lanes.config.PolygonConfig;
 import com.example.lanes.core.LanePolygonService;
 import com.example.lanes.core.LidarPreprocessor;
 import com.example.lanes.core.OverlayResult;
+import com.example.lanes.dto.MaskRCNNResponse;
+import com.example.lanes.dto.MaskRCNNPolygonDTO;
 import com.example.lanes.model.DebugFrames;
 import com.example.lanes.model.PolygonDto;
+import com.example.lanes.service.MaskRCNNInferenceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -27,6 +30,7 @@ public class PolygonController {
 
     private final LanePolygonService lanePolygonService;
     private final PolygonConfig polygonConfig;
+    private final MaskRCNNInferenceService maskRCNNService;
 
     @PostMapping(value = "/overlay", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<byte[]> overlay(
@@ -141,5 +145,97 @@ public class PolygonController {
         zos.putNextEntry(entry);
         zos.write(content);
         zos.closeEntry();
+    }
+    
+    // MaskRCNN Endpoints
+    
+    @PostMapping(value = "/maskrcnn", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public MaskRCNNResponse maskrcnnInference(
+            @RequestParam("data") MultipartFile data,
+            @RequestParam(name = "resolution", defaultValue = "0.20") double resolution,
+            @RequestParam(name = "min_area", defaultValue = "200") int minArea) throws Exception {
+        
+        File tmp = File.createTempFile("in_", null);
+        data.transferTo(tmp);
+
+        File png;
+        double ppm;
+        String name = data.getOriginalFilename().toLowerCase();
+
+        if (name.endsWith(".laz") || name.endsWith(".las")) {
+            LidarPreprocessor.PreResult pr = LidarPreprocessor.lazToPng(tmp, resolution);
+            png = pr.png();
+            ppm = 1.0 / resolution;
+        } else {
+            png = tmp;
+            ppm = polygonConfig.getPpm();
+        }
+
+        MaskRCNNResponse response = maskRCNNService.inferPolygons(png, ppm, minArea);
+        
+        tmp.delete();
+        if (!png.equals(tmp)) {
+            png.delete();
+        }
+        
+        return response;
+    }
+    
+    @PostMapping(value = "/maskrcnn/overlay", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<byte[]> maskrcnnOverlay(
+            @RequestParam("data") MultipartFile data,
+            @RequestParam(name = "resolution", defaultValue = "0.20") double resolution,
+            @RequestParam(name = "min_area", defaultValue = "200") int minArea,
+            @RequestParam(name = "validate_rules", defaultValue = "true") boolean validateRules) throws Exception {
+        
+        File tmp = File.createTempFile("in_", null);
+        data.transferTo(tmp);
+
+        File png;
+        double ppm;
+        String name = data.getOriginalFilename().toLowerCase();
+
+        if (name.endsWith(".laz") || name.endsWith(".las")) {
+            LidarPreprocessor.PreResult pr = LidarPreprocessor.lazToPng(tmp, resolution);
+            png = pr.png();
+            ppm = 1.0 / resolution;
+        } else {
+            png = tmp;
+            ppm = polygonConfig.getPpm();
+        }
+
+        // Get MaskRCNN polygons
+        MaskRCNNResponse maskrcnnResponse = maskRCNNService.inferPolygons(png, ppm, minArea);
+        
+        // Convert to traditional pipeline for overlay rendering and rule validation
+        byte[] pngBytes = java.nio.file.Files.readAllBytes(png.toPath());
+        OverlayResult overlayResult;
+        
+        if (validateRules) {
+            // Use traditional pipeline with RAG validation
+            overlayResult = lanePolygonService.process(pngBytes, ppm);
+        } else {
+            // Use MaskRCNN results directly for overlay
+            overlayResult = lanePolygonService.processWithMaskRCNN(pngBytes, maskrcnnResponse);
+        }
+        
+        tmp.delete();
+        if (!png.equals(tmp)) {
+            png.delete();
+        }
+        
+        return ResponseEntity.ok()
+            .contentType(MediaType.IMAGE_PNG)
+            .header("X-MaskRCNN-Detections", String.valueOf(maskrcnnResponse.totalDetections()))
+            .header("X-Valid-Lane-Markings", String.valueOf(maskrcnnResponse.getValidLaneMarkings().size()))
+            .body(overlayResult.pngBytes());
+    }
+    
+    @GetMapping("/maskrcnn/health")
+    public ResponseEntity<String> maskrcnnHealth() {
+        boolean healthy = maskRCNNService.isServiceHealthy();
+        return healthy ? 
+            ResponseEntity.ok("MaskRCNN inference service is healthy") :
+            ResponseEntity.status(503).body("MaskRCNN inference service is not available");
     }
 }

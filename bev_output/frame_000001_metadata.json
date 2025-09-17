@@ -1,0 +1,15 @@
+{
+  "resolution_m_per_px": 0.2,
+  "ppm": 5.0,
+  "extent": [
+    -80,
+    80,
+    -80,
+    80
+  ],
+  "image_shape": [
+    800,
+    800
+  ],
+  "description": "Demo BEV intensity image with synthetic road markings"
+}

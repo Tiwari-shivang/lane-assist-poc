@@ -1,0 +1,40 @@
+FROM openjdk:17-jdk-slim
+
+# Install system dependencies for OpenCV native libraries
+RUN apt-get update && apt-get install -y \
+    curl \
+    libgtk-3-0 \
+    libglib2.0-0 \
+    libgdal-dev \
+    pdal \
+    gdal-bin \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy Maven wrapper and pom.xml
+COPY .mvn/ .mvn/
+COPY mvnw pom.xml ./
+
+# Download dependencies
+RUN ./mvnw dependency:go-offline -B
+
+# Copy source code
+COPY src/ src/
+
+# Build application
+RUN ./mvnw clean package -DskipTests -B
+
+# Copy the built jar
+RUN cp target/*.jar app.jar
+
+# Expose port
+EXPOSE 8090
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8090/actuator/health || exit 1
+
+# Run the application
+ENTRYPOINT ["java", "-jar", "app.jar"]

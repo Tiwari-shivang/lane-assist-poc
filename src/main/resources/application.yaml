@@ -39,3 +39,8 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
+
+# MaskRCNN Inference Service Configuration
+inference:
+  service:
+    url: http://localhost:8000

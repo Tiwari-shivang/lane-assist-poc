@@ -1,0 +1,74 @@
+version: "3.8"
+
+services:
+  # MaskRCNN Inference Service
+  inference:
+    build: 
+      context: ./inference
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount trained model if available
+      - ./inference/out:/app/out:ro
+      # Mount dataset for training (optional)
+      - ./dataset:/app/dataset:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Spring Boot Application
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile.spring
+    ports:
+      - "8090:8090"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - INFERENCE_SERVICE_URL=http://inference:8000
+    depends_on:
+      inference:
+        condition: service_healthy
+    volumes:
+      # Mount for LiDAR file processing
+      - ./data:/app/data:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # MySQL Database (optional, for persistence)
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: lane_assist
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+
+networks:
+  default:
+    name: lane-assist-network

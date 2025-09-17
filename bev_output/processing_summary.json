@@ -1,0 +1,55 @@
+{
+  "input_source": "Synthetic demo data (simulating Waymo TFRecord)",
+  "output_directory": "bev_output",
+  "resolution_m_per_px": 0.2,
+  "ppm": 5.0,
+  "extent": [
+    -80,
+    80,
+    -80,
+    80
+  ],
+  "processed_frames": 5,
+  "frames": [
+    {
+      "frame": 0,
+      "output_file": "frame_000000.png",
+      "image_shape": [
+        800,
+        800
+      ]
+    },
+    {
+      "frame": 1,
+      "output_file": "frame_000001.png",
+      "image_shape": [
+        800,
+        800
+      ]
+    },
+    {
+      "frame": 2,
+      "output_file": "frame_000002.png",
+      "image_shape": [
+        800,
+        800
+      ]
+    },
+    {
+      "frame": 3,
+      "output_file": "frame_000003.png",
+      "image_shape": [
+        800,
+        800
+      ]
+    },
+    {
+      "frame": 4,
+      "output_file": "frame_000004.png",
+      "image_shape": [
+        800,
+        800
+      ]
+    }
+  ]
+}

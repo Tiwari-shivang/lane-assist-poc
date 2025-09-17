@@ -74,3 +74,10 @@ polygons_result.json
 
 # Spring Boot
 spring.log
+
+# Waymo data and outputs
+data/*
+out/*
+*.tfrecord
+*.tar
+*.laz

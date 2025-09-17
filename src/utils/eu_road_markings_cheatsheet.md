@@ -30,12 +30,12 @@
 
 ### 1.3 Solid line (single)
 - **Width:** ≥ **0.10** m (≥ **0.15** m for motorway edge lines)  
-- **Minimum continuous length:** ≥ **20** m (when used as a prohibition)  
+- **Minimum continuous lengt[eu_road_markings_evals.yaml](eu_road_markings_evals.yaml)h:** ≥ **20** m (when used as a prohibition)  
 - **Rule:** Drivers **must not cross or straddle**.
 
 ### 1.4 Double line (solid+broken / solid+solid)
 - **Solid + broken (adjacent):** **Obey the nearer line** (i.e., if solid on your side → no crossing).  
-- **Double solid:** No crossing from either side; used for strong separation.
+- **Double solid:**[eu_road_markings_evals.yaml](eu_road_markings_evals.yaml) No crossing from either side; used for strong separation.
 
 ### 1.5 Separation of main vs accel/decel lanes
 - **Broken line width:** **≥ 2 ×** the width of a normal broken line (i.e., visually heavier).
