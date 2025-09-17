@@ -197,7 +197,7 @@ public class RuleSuiteLoaderTest {
 
         Path tempFile = createTempYamlFileInTempDir("complex_rules.yaml", complexYaml);
 
-        List<Rule> rules = loader.load(tempFile.toString().replace(tempDir.toString() + "\\", "").replace("\\", "/"));
+        List<Rule> rules = loader.load("complex_rules.yaml");
 
         assertNotNull(rules);
         assertEquals(3, rules.size());
@@ -256,7 +256,7 @@ public class RuleSuiteLoaderTest {
 
         Path tempFile = createTempYamlFileInTempDir("special_chars_rules.yaml", specialYaml);
 
-        List<Rule> rules = loader.load(tempFile.toString().replace(tempDir.toString() + "\\", "").replace("\\", "/"));
+        List<Rule> rules = loader.load("special_chars_rules.yaml");
 
         assertNotNull(rules);
         assertEquals(1, rules.size());
@@ -287,7 +287,7 @@ public class RuleSuiteLoaderTest {
 
         Path tempFile = createTempYamlFileInTempDir("numeric_edge_rules.yaml", numericYaml);
 
-        List<Rule> rules = loader.load(tempFile.toString().replace(tempDir.toString() + "\\", "").replace("\\", "/"));
+        List<Rule> rules = loader.load("numeric_edge_rules.yaml");
 
         assertNotNull(rules);
         assertEquals(1, rules.size());
@@ -351,7 +351,7 @@ public class RuleSuiteLoaderTest {
 
         Path tempFile = createTempYamlFileInTempDir("large_rules.yaml", largeYaml.toString());
 
-        List<Rule> rules = loader.load(tempFile.toString().replace(tempDir.toString() + "\\", "").replace("\\", "/"));
+        List<Rule> rules = loader.load("large_rules.yaml");
 
         assertNotNull(rules);
         assertEquals(100, rules.size());

@@ -30,11 +30,15 @@ public class LidarImageProcessor implements CommandLineRunner {
         System.out.println("Processing European road markings...\n");
 
         try {
-            // Read the input LiDAR image
-            Path inputPath = Paths.get("input_lidar_road.png");
-            if (!Files.exists(inputPath)) {
-                System.err.println("ERROR: Input image not found: " + inputPath.toAbsolutePath());
-                System.err.println("Please run the generate_lidar_image.py script first.");
+            // Look for any input image in common formats
+            Path inputPath = findInputImage();
+            if (inputPath == null) {
+                System.out.println("INFO: No input image found for demo processing.");
+                System.out.println("To run the demo, provide one of these files:");
+                System.out.println("  - input_lidar_road.png");
+                System.out.println("  - test_image.png");
+                System.out.println("  - sample.png");
+                System.out.println("Or use the API endpoints to process images directly.");
                 return;
             }
 
@@ -129,6 +133,24 @@ public class LidarImageProcessor implements CommandLineRunner {
             System.err.println("ERROR: Unexpected error during processing: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    private Path findInputImage() {
+        String[] possibleNames = {
+            "input_lidar_road.png",
+            "test_image.png", 
+            "sample.png",
+            "road_image.png",
+            "lidar_image.png"
+        };
+        
+        for (String name : possibleNames) {
+            Path path = Paths.get(name);
+            if (Files.exists(path)) {
+                return path;
+            }
+        }
+        return null;
     }
 
     private void analyzeEuropeanCompliance(List<PolygonDto> polygons, double ppm) {

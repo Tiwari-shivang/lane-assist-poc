@@ -3,7 +3,7 @@ server:
 
 lanes:
   useVision: false             # LiDAR-only (no OCR)
-  ppm: 5.0                     # pixels-per-meter; set from dataset or GeoTIFF
+  ppm: 5.0                     # pixels-per-meter; used only when input is already an image
   minAreaFrac: 0.0015          # min contour area as fraction of H*W
   epsilonFrac: 0.012           # approxPolyDP fraction (shape simplification)
   roadOverlapMin: 0.65         # polygon must lie mostly on road mask
@@ -13,6 +13,17 @@ lanes:
   tophat:
     kernelPx: 21               # 17–31 typical (odd only)
   debugFrames: true            # enable /debug ZIP with masks & overlay
+
+polygons:
+  ppm: 5.0                     # used only when input is already an image
+  minAreaFrac: 0.0015
+  epsilonFrac: 0.012
+  roadOverlapMin: 0.65
+  kernel:
+    lengthFrac: 0.08
+    thickFrac: 0.02
+  tophat:
+    kernelPx: 21
 
 spring:
   servlet:
